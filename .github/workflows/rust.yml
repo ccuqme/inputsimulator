@@ -1,0 +1,61 @@
+name: Input Simulator CI
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ubuntu-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwayland-dev libxkbcommon-dev
+
+    - name: Build
+      run: cargo build --release
+    
+    - name: Prepare artifact directory
+      run: |
+        export VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[0].version')
+        mkdir -p "inputsimulator-${VERSION}-linux"
+        cp target/release/inputsimulator "inputsimulator-${VERSION}-linux/inputsimulator"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: inputsimulator-linux
+        path: inputsimulator-*-linux
+        compression-level: 9
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: inputsimulator-*-linux/*
+        draft: false
+        prerelease: false
+        generate_release_notes: true
