@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/c7621d83-1e6b-45cf-bd51-609ebae1fd6c)
+![image](https://github.com/user-attachments/assets/b6aba3b6-d9ee-47ba-a204-8d3c7e01f572)
 
 # AutoClicker for Keyboard and Mouse
 
