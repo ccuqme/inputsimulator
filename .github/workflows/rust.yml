@@ -41,21 +41,21 @@ jobs:
     - name: Prepare artifact directory
       run: |
         export VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[0].version')
-        mkdir -p "inputsimulator-${VERSION}-linux"
-        cp target/release/inputsimulator "inputsimulator-${VERSION}-linux/inputsimulator"
+        mkdir -p "inputsimulator"
+        cp target/release/inputsimulator "inputsimulator/inputsimulator"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: inputsimulator-linux
-        path: inputsimulator-*-linux
+        name: inputsimulator-${VERSION}-linux
+        path: inputsimulator
         compression-level: 9
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: inputsimulator-*-linux/*
+        files: inputsimulator/*
         draft: false
         prerelease: false
         generate_release_notes: true
