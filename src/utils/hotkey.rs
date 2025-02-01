@@ -102,28 +102,33 @@ pub fn start_global_hotkey_listener(
             // Handle hotkey state
             let mut prev_state = previous_state.lock().unwrap();
             if is_hotkey_pressed && !*prev_state {
-                let now = Instant::now();
-                let mut last_toggle_time = last_toggle.lock().unwrap();
+                // Prevent triggering simulation if binding global hotkey is active.
+                if app_data.lock().unwrap().capturing_global_hotkey {
+                    *prev_state = is_hotkey_pressed;
+                } else {
+                    let now = Instant::now();
+                    let mut last_toggle_time = last_toggle.lock().unwrap();
 
-                if last_toggle_time.map_or(true, |last| 
-                    now.duration_since(last).as_millis() > HOTKEY_TOGGLE_DELAY_MS as u128) {
-                    let mut is_running = running.lock().unwrap();
-                    *is_running = !*is_running;
-                    
-                    if *is_running {
-                        log::info!("Hotkey pressed, starting simulation");
-                        initialize_simulation(&app_data, &selected_keys, &modifier_mode);
-                        start_simulation(
-                            Arc::clone(&running),
-                            Arc::clone(&interval_ms),
-                            Arc::clone(&selected_keys),
-                            Arc::clone(&modifier_mode),
-                        );
-                    } else {
-                        log::info!("Hotkey pressed, stopping simulation");
+                    if last_toggle_time.map_or(true, |last| 
+                        now.duration_since(last).as_millis() > HOTKEY_TOGGLE_DELAY_MS as u128) {
+                        let mut is_running = running.lock().unwrap();
+                        *is_running = !*is_running;
+                        
+                        if *is_running {
+                            log::info!("Hotkey pressed, starting simulation");
+                            initialize_simulation(&app_data, &selected_keys, &modifier_mode);
+                            start_simulation(
+                                Arc::clone(&running),
+                                Arc::clone(&interval_ms),
+                                Arc::clone(&selected_keys),
+                                Arc::clone(&modifier_mode),
+                            );
+                        } else {
+                            log::info!("Hotkey pressed, stopping simulation");
+                        }
+                        
+                        *last_toggle_time = Some(now);
                     }
-                    
-                    *last_toggle_time = Some(now);
                 }
             }
 
