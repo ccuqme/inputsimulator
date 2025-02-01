@@ -41,7 +41,11 @@ impl<'a> View<'a> {
         let right_column = self.build_right_column();
 
         widget::row()
-            .push(left_column.width(Length::FillPortion(1)))
+            .push(
+                widget::container(left_column)
+                    .padding(10)
+                    .width(Length::FillPortion(1))
+            )
             .push(widget::vertical_space())
             .push(right_column.width(Length::FillPortion(1)))
             .spacing(20)
