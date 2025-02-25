@@ -14,10 +14,9 @@ use evdev_rs::{
 };
 
 use crate::{
-    config::KeyBehaviorMode,
+    config::{KeyBehaviorMode, ModifierBehaviorMode},
     constants::{
         SIMULATION_HOLD_DELAY_MS, 
-        SIMULATION_HOLD_INTERVAL_MS,
         MAX_RETRIES,
         RETRY_DELAY_MS,
         MAX_DEVICE_INIT_RETRIES,
@@ -26,25 +25,39 @@ use crate::{
     error::{SimulatorError, Result},
 };
 
-fn write_event_with_retry(device: &UInputDevice, event: &InputEvent) -> Result<()> {
+fn retry<T, F>(mut operation: F, max_retries: u32, delay_ms: u64, log_fn: impl Fn(usize)) -> Result<T>
+where
+    F: FnMut() -> Result<T>,
+{
     let mut last_error = None;
-    for attempt in 0..MAX_RETRIES {
-        match device.write_event(event) {
-            Ok(_) => return Ok(()),
+    for attempt in 0..max_retries {
+        match operation() {
+            Ok(result) => return Ok(result),
             Err(e) => {
                 last_error = Some(e);
-                if attempt < MAX_RETRIES - 1 {
-                    log::debug!("Write event attempt {} failed, retrying...", attempt + 1);
-                    thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                if attempt < max_retries - 1 {
+                    log_fn((attempt + 1) as usize);
+                    thread::sleep(Duration::from_millis(delay_ms));
                 }
             }
         }
     }
-    Err(SimulatorError::KeySimulation(format!(
-        "Failed after {} retries: {:?}", 
-        MAX_RETRIES, 
-        last_error.unwrap()
-    )).into())
+    Err(last_error.unwrap())
+}
+
+fn write_event_with_retry(device: &UInputDevice, event: &InputEvent) -> Result<()> {
+    retry(
+        || {
+            device.write_event(event)
+                .map_err(|e| SimulatorError::KeySimulation(format!("Failed event: {:?}", e)).into())
+        },
+        MAX_RETRIES,
+        RETRY_DELAY_MS,
+        |attempt| {
+            log::debug!("Write event attempt {} failed, retrying...", attempt);
+        },
+    )
+    .map_err(|e| e)
 }
 
 fn write_key_events(device: &UInputDevice, keys: &[EventCode], value: i32, timeval: &TimeVal) -> Result<()> {
@@ -81,24 +94,50 @@ fn setup_device(selected_keys: &Arc<Mutex<Vec<EventCode>>>) -> Result<UInputDevi
 }
 
 fn setup_device_with_retry(selected_keys: &Arc<Mutex<Vec<EventCode>>>) -> Result<UInputDevice> {
-    let mut last_error = None;
-    for attempt in 0..MAX_DEVICE_INIT_RETRIES {
-        match setup_device(selected_keys) {
-            Ok(device) => return Ok(device),
-            Err(e) => {
-                last_error = Some(e);
-                if attempt < MAX_DEVICE_INIT_RETRIES - 1 {
-                    log::warn!("Device initialization attempt {} failed, retrying...", attempt + 1);
-                    thread::sleep(Duration::from_millis(DEVICE_INIT_RETRY_DELAY_MS));
+    retry(
+        || setup_device(selected_keys),
+        MAX_DEVICE_INIT_RETRIES,
+        DEVICE_INIT_RETRY_DELAY_MS,
+        |attempt| {
+            log::warn!("Device initialization attempt {} failed, retrying...", attempt);
+        },
+    )
+    .map_err(|e| SimulatorError::DeviceInitialization(format!("Failed after {} retries: {:?}", MAX_DEVICE_INIT_RETRIES, e)).into())
+}
+
+// New function to initialize simulation keys
+pub fn initialize_simulation_keys(
+    app_data: &crate::config::AppData,
+    selected_keys: &mut Vec<evdev_rs::enums::EventCode>,
+    key_behavior: &mut crate::config::KeyBehaviorMode,
+) {
+    selected_keys.clear();
+    *key_behavior = app_data.key_behavior;
+
+    log::debug!("Initializing simulation with keys: {:?}", app_data.selected_keys);
+
+    for raw in &app_data.selected_keys {
+        if let Some(device_key) = crate::utils::key_utils::raw_key_to_device_keycode(raw) {
+            if let Some(ev_key) = crate::utils::key_utils::keycode_to_evkey(device_key) {
+                // Handle modifier keys based on modifier behavior setting
+                if crate::utils::key_utils::is_modifier_key(raw) && 
+                   app_data.modifier_behavior == crate::config::ModifierBehaviorMode::Click {
+                    selected_keys.push(evdev_rs::enums::EventCode::EV_KEY(ev_key));
+                } else {
+                    selected_keys.push(evdev_rs::enums::EventCode::EV_KEY(ev_key));
                 }
+                log::debug!("Added key: {:?}", ev_key);
             }
+        } else {
+            log::warn!("Failed to map key: {}", raw);
         }
     }
-    Err(SimulatorError::DeviceInitialization(format!(
-        "Failed after {} retries: {:?}", 
-        MAX_DEVICE_INIT_RETRIES, 
-        last_error.unwrap()
-    )).into())
+
+    if selected_keys.is_empty() {
+        log::warn!("No valid keys initialized for simulation");
+    } else {
+        log::info!("Simulation initialized with {} keys", selected_keys.len());
+    }
 }
 
 // Main simulation loop that handles both click and hold modes
@@ -106,12 +145,17 @@ pub fn simulate_keys(
     running: Arc<Mutex<bool>>,
     interval_ms: Arc<Mutex<u64>>,
     selected_keys: Arc<Mutex<Vec<EventCode>>>,
-    modifier_mode: Arc<Mutex<KeyBehaviorMode>>,
+    key_behavior: Arc<Mutex<KeyBehaviorMode>>,
+    modifier_behavior: ModifierBehaviorMode,
 ) -> Result<()> {
     let uinput_device = setup_device_with_retry(&selected_keys)?;
     let timeval = TimeVal::new(0, 0);
-    let keys = selected_keys.lock().unwrap().clone();
-    let mode = *modifier_mode.lock().unwrap();
+    // Combine acquisitions for keys and mode.
+    let (keys, mode) = {
+        let keys = selected_keys.lock().unwrap().clone();
+        let mode = *key_behavior.lock().unwrap();
+        (keys, mode)
+    };
 
     log::info!("Device initialized with keys: {:?}", keys);
     log::info!("Key behavior mode set to: {:?}", mode);
@@ -127,24 +171,42 @@ pub fn simulate_keys(
             write_key_events(&uinput_device, &keys, 1, &timeval)?;
 
             while *running.lock().unwrap() {
-                write_key_events(&uinput_device, &[], 0, &timeval)?; // Just sync
-                thread::sleep(Duration::from_millis(SIMULATION_HOLD_INTERVAL_MS));
+                write_key_events(&uinput_device, &[], 0, &timeval)?;
             }
 
             // Release keys
             write_key_events(&uinput_device, &keys, 0, &timeval)?;
         }
         KeyBehaviorMode::Click => {
-            while *running.lock().unwrap() {
-                let interval = *interval_ms.lock().unwrap();
+            if modifier_behavior == ModifierBehaviorMode::Click {
+                let (mod_keys, non_mod_keys): (Vec<EventCode>, Vec<EventCode>) =
+                    keys.iter().cloned().partition(|k| crate::utils::key_utils::is_modifier_evcode(k));
 
-                // Press keys
-                write_key_events(&uinput_device, &keys, 1, &timeval)?;
-                thread::sleep(Duration::from_millis(SIMULATION_HOLD_DELAY_MS));
+                while *running.lock().unwrap() {
+                    let interval = *interval_ms.lock().unwrap();
+                    for nm in &non_mod_keys {
+                        if !mod_keys.is_empty() {
+                            write_key_events(&uinput_device, &mod_keys, 1, &timeval)?;
+                        }
+                        write_key_events(&uinput_device, &[*nm], 1, &timeval)?;
+                        write_key_events(&uinput_device, &[*nm], 0, &timeval)?;
+                        if !mod_keys.is_empty() {
+                            write_key_events(&uinput_device, &mod_keys, 0, &timeval)?;
+                        }
+                        thread::sleep(Duration::from_millis(interval));
+                    }
+                }
+            } else {
+                while *running.lock().unwrap() {
+                    let interval = *interval_ms.lock().unwrap();
 
-                // Release keys
-                write_key_events(&uinput_device, &keys, 0, &timeval)?;
-                thread::sleep(Duration::from_millis(interval));
+                    // Press keys
+                    write_key_events(&uinput_device, &keys, 1, &timeval)?;
+
+                    // Release keys
+                    write_key_events(&uinput_device, &keys, 0, &timeval)?;
+                    thread::sleep(Duration::from_millis(interval));
+                }
             }
         }
     }

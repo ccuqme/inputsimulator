@@ -1,9 +1,7 @@
 pub const MIN_INTERVAL_MS: u64 = 10;
-pub const MAX_INTERVAL_MS: u64 = 1000;
+pub const MAX_INTERVAL_MS: u64 = 5000;
 pub const DEFAULT_INTERVAL_MS: u64 = 100;
-pub const HOTKEY_TOGGLE_DELAY_MS: u64 = 500;
 pub const SIMULATION_HOLD_DELAY_MS: u64 = 50;
-pub const SIMULATION_HOLD_INTERVAL_MS: u64 = 10;
 
 pub const MAX_RETRIES: u32 = 3;
 pub const RETRY_DELAY_MS: u64 = 5;

@@ -1,11 +1,5 @@
-use cosmic::{
-    cosmic_config::{Config as CosmicConfig, CosmicConfigEntry, Error as CosmicError},
-    iced::keyboard::Key,
-};
 use serde::{Serialize, Deserialize};
 use std::str::FromStr;
-
-use crate::utils::{KeyWrapper, serialize_keys, deserialize_keys};
 
 const KEY_BEHAVIOR_MODES: [(&str, KeyBehaviorMode); 2] = [
     ("Click", KeyBehaviorMode::Click),
@@ -44,33 +38,39 @@ impl Default for KeyBehaviorMode {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct Config {
-    pub captured_keys: Vec<KeyWrapper>,
-    pub current_key_bind: Vec<KeyWrapper>,
-    pub interval_ms: u64,
-    pub modifier_mode: KeyBehaviorMode,
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ModifierBehaviorMode {
+    Hold,
+    Click,
 }
 
-impl CosmicConfigEntry for Config {
-    const VERSION: u64 = 1;
-
-    fn write_entry(&self, _config: &CosmicConfig) -> std::result::Result<(), CosmicError> {
-        serde_json::to_string(self)
-            .map_err(|e| CosmicError::Io(std::io::Error::new(std::io::ErrorKind::Other, format!("JSON error: {}", e))))?;
-        Ok(())
-    }
-
-    fn get_entry(_config: &CosmicConfig) -> std::result::Result<Self, (Vec<CosmicError>, Self)> {
-        // Try to read from config, fallback to default if fails
-        let default = Self::default();
-        Ok(default)
-    }
-
-    fn update_keys<T: AsRef<str>>(&mut self, _: &CosmicConfig, _: &[T]) -> (Vec<CosmicError>, Vec<&'static str>) {
-        (vec![], vec![])
+impl std::fmt::Display for ModifierBehaviorMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModifierBehaviorMode::Hold => write!(f, "Hold"),
+            ModifierBehaviorMode::Click => write!(f, "Click"),
+        }
     }
 }
+
+impl FromStr for ModifierBehaviorMode {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<ModifierBehaviorMode, Self::Err> {
+        match input {
+            "Hold" => Ok(ModifierBehaviorMode::Hold),
+            "Click" => Ok(ModifierBehaviorMode::Click),
+            _ => Err(()),
+        }
+    }
+}
+
+impl Default for ModifierBehaviorMode {
+    fn default() -> Self {
+        ModifierBehaviorMode::Click
+    }
+}
+
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub struct HotkeyModifiers {
@@ -111,20 +111,19 @@ impl Default for TempHotkeyState {
     }
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AppData {
     #[serde(skip)]
-    pub captured_keys: Vec<Key>,
-    #[serde(serialize_with = "serialize_keys", deserialize_with = "deserialize_keys")]
-    pub selected_keys: Vec<Key>,
+    pub captured_keys: Vec<String>,
+    #[serde(default)]
+    pub selected_keys: Vec<String>,
     #[serde(default)]
     pub global_keybind: GlobalHotkey,
     pub interval_ms: u64,
-    pub modifier_mode: KeyBehaviorMode,
+    pub key_behavior: KeyBehaviorMode,
+    pub modifier_behavior: ModifierBehaviorMode,
     #[serde(skip)]
     pub capturing_global_hotkey: bool,
-    #[serde(skip)]
-    pub captured_global_hotkey: Option<Key>,
     #[serde(skip)]
     pub temp_hotkey: TempHotkeyState,
 }

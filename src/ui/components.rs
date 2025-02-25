@@ -1,14 +1,12 @@
 use cosmic::{
-    iced::{keyboard::Key, Length},
-    widget::{Button, Column, Dropdown, MouseArea, Row, Slider, TextInput, Text},
+    iced::Length,
+    widget::{button, Column, Dropdown, MouseArea, Row, Slider, TextInput, Text},
     Element,
 };
 use crate::{
     app::{Message, KeyEvent},
-    config::{AppData, KeyBehaviorMode},
+    config::{AppData, KeyBehaviorMode, ModifierBehaviorMode},
     utils::handle_scroll_value,
-    create_button, create_control_row,
-    ui::format_key_for_display,
     constants::{MIN_INTERVAL_MS, MAX_INTERVAL_MS},
 };
 
@@ -63,37 +61,44 @@ pub fn interval_controls(interval: f64, app_data: &AppData) -> Column<'static, M
         .spacing(5)
 }
 
-pub fn build_mouse_buttons() -> Row<'static, Message> {
-    create_control_row!(
-        create_button!("Left Click", Message::AddKey(KeyEvent::mouse_left())),
-        create_button!("Middle Click", Message::AddKey(KeyEvent::mouse_middle())),
-        create_button!("Right Click", Message::AddKey(KeyEvent::mouse_right()))
-    )
+pub fn build_mouse_buttons() -> impl Into<Element<'static, Message>> {
+    Row::new()
+        .spacing(5)
+        .push(
+            button::text("Left Click")
+                .on_press(Message::AddKey(KeyEvent::mouse_left()))
+                .class(cosmic::theme::Button::Text)
+        )
+        .push(
+            button::text("Middle Click")
+                .on_press(Message::AddKey(KeyEvent::mouse_middle()))
+                .class(cosmic::theme::Button::Text)
+        )
+        .push(
+            button::text("Right Click")
+                .on_press(Message::AddKey(KeyEvent::mouse_right()))
+                .class(cosmic::theme::Button::Text)
+        )
 }
 
-pub fn build_capture_controls() -> Row<'static, Message> {
-    create_control_row!(
-        create_button!("OK", Message::FinalizeKeys),
-        create_button!("Cancel", Message::CancelCapture)
-    )
+fn build_generic_dropdown<T, F>(
+    choices: &'static [&'static str],
+    current_mode: T,
+    map_fn: F,
+) -> Dropdown<'static, &'static str, Message>
+where
+    T: ToString,
+    F: Fn(usize) -> Message + 'static,
+{
+    let selected_index = choices.iter().position(|&mode| mode == current_mode.to_string());
+    Dropdown::new(choices, selected_index, map_fn)
 }
 
-pub fn build_hotkey_controls() -> Row<'static, Message> {
-    create_control_row!(
-        create_button!("OK", Message::FinalizeGlobalHotkey),
-        create_button!("Cancel", Message::CancelGlobalHotkey)
-    )
-}
-
-pub fn build_modifier_dropdown(current_mode: KeyBehaviorMode) -> Dropdown<'static, &'static str, Message> {
-    const MODIFIER_MODES: [&str; 2] = ["Click", "Hold"];
-    let selected_index = MODIFIER_MODES
-        .iter()
-        .position(|&mode| mode == current_mode.to_string());
-
-    Dropdown::new(
-        &MODIFIER_MODES,
-        selected_index,
+pub fn build_key_behavior_dropdown(current_mode: KeyBehaviorMode) -> Dropdown<'static, &'static str, Message> {
+    const KEY_BEHAVIORS: [&str; 2] = ["Click", "Hold"];
+    build_generic_dropdown(
+        &KEY_BEHAVIORS,
+        current_mode,
         |index| match index {
             0 => Message::UpdateKeyBehaviorMode(KeyBehaviorMode::Click),
             1 => Message::UpdateKeyBehaviorMode(KeyBehaviorMode::Hold),
@@ -102,7 +107,20 @@ pub fn build_modifier_dropdown(current_mode: KeyBehaviorMode) -> Dropdown<'stati
     )
 }
 
-pub fn build_hotkey_text(
+pub fn build_modifier_behavior_dropdown(current_mode: ModifierBehaviorMode) -> Dropdown<'static, &'static str, Message> {
+    const MODIFIER_BEHAVIOR_MODES: [&str; 2] = ["Click", "Hold"];
+    build_generic_dropdown(
+        &MODIFIER_BEHAVIOR_MODES,
+        current_mode,
+        |index| match index {
+            0 => Message::UpdateModifierBehaviorMode(ModifierBehaviorMode::Click),
+            1 => Message::UpdateModifierBehaviorMode(ModifierBehaviorMode::Hold),
+            _ => Message::Noop,
+        },
+    )
+}
+
+pub fn format_hotkey_text(
     ctrl: bool, 
     alt: bool, 
     shift: bool, 
@@ -118,20 +136,21 @@ pub fn build_hotkey_text(
     parts.join("+")
 }
 
-pub fn build_start_button(is_running: bool) -> Button<'static, Message> {
-    Button::new_image(
-        Text::new(if is_running { "Stop" } else { "Start" }),
-        None
-    ).on_press(Message::ToggleRunning)
+pub fn build_start_button(is_running: bool) -> impl Into<Element<'static, Message>> {
+    button::text(if is_running { "Stop" } else { "Start" })
+        .on_press(Message::ToggleRunning)
+        .class(cosmic::theme::Button::Text)
 }
 
-pub fn build_selected_keys_text(keys: &[Key]) -> Element<'static, Message> {
-    let formatted_keys = keys.iter()
-        .map(format_key_for_display)
-        .collect::<Vec<String>>()
-        .join(", ");
-    
-    log::debug!("Displaying selected keys: {}", formatted_keys);
-    
-    Text::new(format!("Selected Keys: [{}]", formatted_keys)).into()
+pub fn build_selected_keys_text(keys: &[String]) -> Element<'static, Message> {
+    let selected_count = keys.len();
+    Column::new()
+        .push(Text::new(format!("Selected Keys ({}):", selected_count)))
+        .push(
+            Text::new(keys.join(", "))
+                .width(Length::Fill)
+                .wrapping(cosmic::iced_core::text::Wrapping::WordOrGlyph)
+        )
+        .spacing(5)
+        .into()
 }

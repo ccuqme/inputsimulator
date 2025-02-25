@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/b6aba3b6-d9ee-47ba-a204-8d3c7e01f572)
+![image](https://github.com/user-attachments/assets/4d5facec-9f27-4457-8890-9412347ee145)
 
 # AutoClicker for Keyboard and Mouse
 
@@ -21,6 +21,7 @@ This application simulates repeated key presses and mouse clicks at a specified 
 
 - Global hotkeys **do not work** with pure Wayland applications on the COSMIC Desktop, but they work fine with Xwayland applications (e.g., Steam and games running through Proton).
 - The application starts with a phantom winit window. This is a minor issue that may be addressed in the future.
+- Modifier Behavior set to "Click" is currently not working. Got busy, and decided to commit the current changes. Will finish modifier behavior at a later date.
 
 ## Building from Source
 
@@ -48,6 +49,7 @@ To build the application from source, you need to have Rust and Cargo installed.
 - [lazy_static](https://crates.io/crates/lazy_static)
 - [thiserror](https://crates.io/crates/thiserror)
 - [log](https://crates.io/crates/log)
+- [regex](https://crates.io/crates/regex)
 
 ## Contributing
 

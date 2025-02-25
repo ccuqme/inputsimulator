@@ -1,11 +1,11 @@
 use cosmic::{
     iced::{Length, Element},
-    widget::{self, button, text},
+    widget::{self, button, text, Column, Container, Row, Space, text::Text},
     Theme,
 };
 use crate::{
     app::Message,
-    config::AppData,
+    config::{AppData, KeyBehaviorMode},
     ui::components,
 };
 
@@ -40,16 +40,72 @@ impl<'a> View<'a> {
         let left_column = self.build_left_column();
         let right_column = self.build_right_column();
 
-        widget::row()
-            .push(
-                widget::container(left_column)
-                    .padding(10)
-                    .width(Length::FillPortion(1))
-            )
-            .push(widget::vertical_space())
-            .push(right_column.width(Length::FillPortion(1)))
-            .spacing(20)
-            .into()
+        let footer = {
+            let mut row = Row::new().spacing(5);
+
+            if self.is_capturing {
+                // Show OK/Cancel buttons for key capture in place of Start/Stop
+                row = row
+                    .push(button::text("OK").on_press(Message::FinalizeKeys))
+                    .push(button::text("Cancel").on_press(Message::CancelCapture))
+                    .push(Space::with_width(Length::Fill));
+            } else {
+                // Show Start/Stop button when not capturing
+                row = row
+                    .push(components::build_start_button(self.is_running))
+                    .push(Space::with_width(Length::Fill));
+            }
+
+            if self.is_capturing_hotkey {
+                let hotkey_text = components::format_hotkey_text(
+                    self.app_data_guard.temp_hotkey.modifiers.ctrl,
+                    self.app_data_guard.temp_hotkey.modifiers.alt,
+                    self.app_data_guard.temp_hotkey.modifiers.shift,
+                    self.app_data_guard.temp_hotkey.modifiers.super_key,
+                    self.app_data_guard.temp_hotkey.key.as_deref(),
+                );
+                row = row
+                    .push(Text::new(format!("New Global Hotkey: {}", hotkey_text)))
+                    .push(button::text("OK").on_press(Message::FinalizeGlobalHotkey))
+                    .push(button::text("Cancel").on_press(Message::CancelGlobalHotkey));
+            } else if !self.is_capturing {
+                row = row.push(
+                    button::text(format!("Global Hotkey: {}", components::format_hotkey_text(
+                        self.app_data_guard.global_keybind.modifiers.ctrl,
+                        self.app_data_guard.global_keybind.modifiers.alt,
+                        self.app_data_guard.global_keybind.modifiers.shift,
+                        self.app_data_guard.global_keybind.modifiers.super_key,
+                        Some(&self.app_data_guard.global_keybind.key)
+                    )))
+                        .on_press(Message::CaptureGlobalHotkey)
+                        .class(cosmic::theme::Button::Text)
+                );
+            }
+
+            row
+        };
+
+        Container::new(
+            Column::new()
+                .push(
+                    Row::new()
+                        .push(
+                            Container::new(left_column)
+                                .width(Length::FillPortion(1))
+                        )
+                        .push(widget::vertical_space())
+                        .push(
+                            Container::new(right_column)
+                                .width(Length::FillPortion(1))
+                        )
+                        .spacing(20)
+                )
+                .push(footer)
+                .padding(10)
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 
     fn build_left_column(&self) -> widget::Column<'a, Message> {
@@ -60,14 +116,16 @@ impl<'a> View<'a> {
                 "Capture Keys{}",
                 if self.is_capturing { " (Active)" } else { "" }
             ))
-            .on_press(Message::CaptureKeys),
+                .on_press(Message::CaptureKeys)
+                .class(cosmic::theme::Button::Text)
         );
 
+        // Show either captured keys during capture, or selected keys when not capturing
         if self.is_capturing {
             let captured_keys_text = self.app_data_guard
                 .captured_keys
                 .iter()
-                .map(super::format_key_for_display)
+                .map(super::format_raw_key_for_display)
                 .collect::<Vec<_>>()
                 .join(", ");
 
@@ -75,13 +133,11 @@ impl<'a> View<'a> {
 
             column = column
                 .push(text::body(format!("Captured Keys: {}", captured_keys_text)))
-                .push(components::build_mouse_buttons())
-                .push(components::build_capture_controls());
+                .push(components::build_mouse_buttons());
+        } else {
+            column = column
+                .push(components::build_selected_keys_text(&self.app_data_guard.selected_keys));
         }
-
-        column = column
-            .push(components::build_selected_keys_text(&self.app_data_guard.selected_keys))
-            .push(components::build_start_button(self.is_running));
 
         column
     }
@@ -92,40 +148,18 @@ impl<'a> View<'a> {
         column = column.push(
             widget::row()
                 .push(text::body("Key Behavior: "))
-                .push(components::build_modifier_dropdown(self.app_data_guard.modifier_mode)),
+                .push(components::build_key_behavior_dropdown(self.app_data_guard.key_behavior)),
         );
-
-        if self.app_data_guard.modifier_mode != crate::config::KeyBehaviorMode::Hold {
+        if self.app_data_guard.key_behavior == KeyBehaviorMode::Click {
+            column = column.push(
+                widget::row()
+                    .push(text::body("Modifier Behavior: "))
+                    .push(components::build_modifier_behavior_dropdown(self.app_data_guard.modifier_behavior)),
+            );
             column = column.push(
                 widget::row()
                     .push(components::interval_controls(self.interval, &self.app_data_guard)),
             );
-        }
-
-        let hotkey_text = components::build_hotkey_text(
-            self.app_data_guard.global_keybind.modifiers.ctrl,
-            self.app_data_guard.global_keybind.modifiers.alt,
-            self.app_data_guard.global_keybind.modifiers.shift,
-            self.app_data_guard.global_keybind.modifiers.super_key,
-            Some(&self.app_data_guard.global_keybind.key)
-        );
-        column = column.push(
-            widget::button::text(format!("Bind Global Hotkey ({})", hotkey_text))
-                .on_press(Message::CaptureGlobalHotkey),
-        );
-
-        if self.is_capturing_hotkey {
-            let pending_text = components::build_hotkey_text(
-                self.app_data_guard.temp_hotkey.modifiers.ctrl,
-                self.app_data_guard.temp_hotkey.modifiers.alt,
-                self.app_data_guard.temp_hotkey.modifiers.shift,
-                self.app_data_guard.temp_hotkey.modifiers.super_key,
-                self.app_data_guard.temp_hotkey.key.as_deref()
-            );
-            log::debug!("Pending hotkey configuration: {}", pending_text);
-            column = column
-                .push(widget::text::body(format!("New Global Hotkey: {}", pending_text)))
-                .push(components::build_hotkey_controls());
         }
 
         column
