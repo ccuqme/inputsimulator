@@ -19,7 +19,7 @@ pub fn interval_controls(interval: f64, app_data: &AppData) -> Column<'static, M
     let interval_input = MouseArea::new(
         TextInput::new("", interval_value.clone())
             .on_input(Message::UpdateInterval)
-            .on_submit(Message::UpdateInterval(interval_value))
+            .on_submit(|value| Message::UpdateInterval(value))
             .padding(5)
             .width(Length::Fixed(60.0))
             .size(16)
@@ -85,16 +85,16 @@ fn build_generic_dropdown<T, F>(
     choices: &'static [&'static str],
     current_mode: T,
     map_fn: F,
-) -> Dropdown<'static, &'static str, Message>
+) -> Dropdown<'static, &'static str, Message, Message>
 where
     T: ToString,
-    F: Fn(usize) -> Message + 'static,
+    F: Fn(usize) -> Message + 'static + Send + Sync,
 {
     let selected_index = choices.iter().position(|&mode| mode == current_mode.to_string());
     Dropdown::new(choices, selected_index, map_fn)
 }
 
-pub fn build_key_behavior_dropdown(current_mode: KeyBehaviorMode) -> Dropdown<'static, &'static str, Message> {
+pub fn build_key_behavior_dropdown(current_mode: KeyBehaviorMode) -> Dropdown<'static, &'static str, Message, Message> {
     const KEY_BEHAVIORS: [&str; 2] = ["Click", "Hold"];
     build_generic_dropdown(
         &KEY_BEHAVIORS,
@@ -107,7 +107,7 @@ pub fn build_key_behavior_dropdown(current_mode: KeyBehaviorMode) -> Dropdown<'s
     )
 }
 
-pub fn build_modifier_behavior_dropdown(current_mode: ModifierBehaviorMode) -> Dropdown<'static, &'static str, Message> {
+pub fn build_modifier_behavior_dropdown(current_mode: ModifierBehaviorMode) -> Dropdown<'static, &'static str, Message, Message> {
     const MODIFIER_BEHAVIOR_MODES: [&str; 2] = ["Click", "Hold"];
     build_generic_dropdown(
         &MODIFIER_BEHAVIOR_MODES,
