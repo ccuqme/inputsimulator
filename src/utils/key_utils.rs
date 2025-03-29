@@ -150,17 +150,6 @@ pub fn normalize_key(raw: &str) -> String {
     key
 }
 
-/// Checks if a key string represents a modifier.
-pub fn is_modifier_key(raw: &str) -> bool {
-    let key = if let Some(stripped) = raw.strip_prefix("Character(\"")
-                          .and_then(|s| s.strip_suffix("\")")) {
-        stripped
-    } else {
-        raw
-    };
-    matches!(key, "Alt" | "AltGraph" | "Control" | "Shift" | "Super")
-}
-
 pub fn keycode_to_evkey(keycode: Keycode) -> Option<EV_KEY> {
     for (_, (k, ev)) in KEY_MAPPINGS.iter() {
         if k == &keycode {
