@@ -105,7 +105,7 @@ fn setup_device_with_retry(selected_keys: &Arc<Mutex<Vec<EventCode>>>) -> Result
     .map_err(|e| SimulatorError::DeviceInitialization(format!("Failed after {} retries: {:?}", MAX_DEVICE_INIT_RETRIES, e)).into())
 }
 
-// New function to initialize simulation keys
+// Initialize simulation keys
 pub fn initialize_simulation_keys(
     app_data: &crate::config::AppData,
     selected_keys: &mut Vec<evdev_rs::enums::EventCode>,
@@ -179,22 +179,27 @@ pub fn simulate_keys(
         }
         KeyBehaviorMode::Click => {
             if modifier_behavior == ModifierBehaviorMode::Click {
-                let (mod_keys, non_mod_keys): (Vec<EventCode>, Vec<EventCode>) =
+                // Separate modifier and non-modifier keys
+                let (mod_keys, non_mod_keys): (Vec<EventCode>, Vec<EventCode>) = 
                     keys.iter().cloned().partition(|k| crate::utils::key_utils::is_modifier_evcode(k));
 
                 while *running.lock().unwrap() {
                     let interval = *interval_ms.lock().unwrap();
+
+                    // For each key sequence
+                    for m in &mod_keys {
+                        // Press and release modifier key first
+                        write_key_events(&uinput_device, &[*m], 1, &timeval)?;
+                        write_key_events(&uinput_device, &[*m], 0, &timeval)?;
+                    }
+
+                    // Then handle non-modifier keys
                     for nm in &non_mod_keys {
-                        if !mod_keys.is_empty() {
-                            write_key_events(&uinput_device, &mod_keys, 1, &timeval)?;
-                        }
                         write_key_events(&uinput_device, &[*nm], 1, &timeval)?;
                         write_key_events(&uinput_device, &[*nm], 0, &timeval)?;
-                        if !mod_keys.is_empty() {
-                            write_key_events(&uinput_device, &mod_keys, 0, &timeval)?;
-                        }
-                        thread::sleep(Duration::from_millis(interval));
                     }
+
+                    thread::sleep(Duration::from_millis(interval));
                 }
             } else {
                 while *running.lock().unwrap() {
