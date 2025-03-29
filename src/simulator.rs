@@ -119,13 +119,7 @@ pub fn initialize_simulation_keys(
     for raw in &app_data.selected_keys {
         if let Some(device_key) = crate::utils::key_utils::raw_key_to_device_keycode(raw) {
             if let Some(ev_key) = crate::utils::key_utils::keycode_to_evkey(device_key) {
-                // Handle modifier keys based on modifier behavior setting
-                if crate::utils::key_utils::is_modifier_key(raw) && 
-                   app_data.modifier_behavior == crate::config::ModifierBehaviorMode::Click {
-                    selected_keys.push(evdev_rs::enums::EventCode::EV_KEY(ev_key));
-                } else {
-                    selected_keys.push(evdev_rs::enums::EventCode::EV_KEY(ev_key));
-                }
+                selected_keys.push(evdev_rs::enums::EventCode::EV_KEY(ev_key));
                 log::debug!("Added key: {:?}", ev_key);
             }
         } else {
