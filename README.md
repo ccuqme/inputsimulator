@@ -1,8 +1,8 @@
 ![image](https://github.com/user-attachments/assets/4d5facec-9f27-4457-8890-9412347ee145)
 
-# AutoClicker for Keyboard and Mouse
+# Linux AutoClicker for Keyboard and Mouse
 
-This application simulates repeated key presses and mouse clicks at a specified interval. You can configure which keys or mouse buttons to simulate and use a global hotkey to toggle the simulation on or off. 
+This tool automates repetitive key presses and mouse clicks at customizable intervals. You can easily set up specific keys or mouse buttons to simulate and toggle the simulation on or off using a global hotkey.
 
 ## Features
 
@@ -14,14 +14,13 @@ This application simulates repeated key presses and mouse clicks at a specified 
 
 ## Compatibility
 
-- **Platforms**: Made for Linux, but there is a slight chance it might work on macOS (although unsupported) due to its `evdev` support.
-- **Desktop Environments**: Tested on KDE Plasma 6.2.4 and COSMIC Desktop Alpha 4.
+- **Platforms**: Made for Linux, untested and unsupported on anything else.
+- **Desktop Environments**: Tested on KDE Plasma 6.3.3 and COSMIC Desktop Alpha 5.
 
 ## Known Issues
 
 - Global hotkeys **do not work** with pure Wayland applications on the COSMIC Desktop, but they work fine with Xwayland applications (e.g., Steam and games running through Proton).
 - The application starts with a phantom winit window. This is a minor issue that may be addressed in the future.
-- Modifier Behavior set to "Click" is currently not working. Got busy, and decided to commit the current changes. Will finish modifier behavior at a later date.
 
 ## Building from Source
 
