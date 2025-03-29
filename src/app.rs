@@ -21,7 +21,7 @@ use crate::{
     config::{AppData, GlobalHotkey, KeyBehaviorMode, ModifierBehaviorMode, TempHotkeyState},
     utils::start_global_hotkey_listener, 
     ui::View,
-    constants::{DEFAULT_INTERVAL_MS},
+    constants::DEFAULT_INTERVAL_MS,
     utils::persistence::save_app_data,
 };
 
@@ -184,42 +184,59 @@ impl Application for InputSimulatorApp {
 }
 
 impl InputSimulatorApp {
+    // Helper function to spawn a simulation thread with proper Arc cloning
+    fn spawn_simulation_thread(
+        running: Arc<Mutex<bool>>,
+        interval_ms: Arc<Mutex<u64>>,
+        selected_keys: Arc<Mutex<Vec<EventCode>>>,
+        key_behavior: Arc<Mutex<KeyBehaviorMode>>,
+        app_data: Arc<Mutex<AppData>>,
+    ) {
+        // Clone Arcs before moving them into the closure
+        let running_inner = Arc::clone(&running);
+        let interval_ms_inner = Arc::clone(&interval_ms);
+        let selected_keys_inner = Arc::clone(&selected_keys);
+        let key_behavior_inner = Arc::clone(&key_behavior);
+        let app_data_inner = Arc::clone(&app_data);
+
+        thread::spawn(move || {
+            let mod_behavior = {
+                let ad = app_data_inner.lock().unwrap();
+                ad.modifier_behavior
+            };
+            if let Err(e) = simulate_keys(
+                running_inner,
+                interval_ms_inner,
+                selected_keys_inner,
+                key_behavior_inner,
+                mod_behavior,
+            ) {
+                log::error!("Failed to simulate keys: {}", e);
+            }
+        });
+    }
+
     // Starts the input simulation thread with current configuration
     fn start_simulation(&self) {
         let running = Arc::clone(&self.running);
         let interval_ms = Arc::clone(&self.interval_ms);
         let selected_keys = Arc::clone(&self.selected_keys);
         let key_behavior = Arc::clone(&self.key_behavior);
-        let app_data_clone = Arc::clone(&self.app_data); // <-- Clone the Arc instead of referencing self
+        let app_data = Arc::clone(&self.app_data);
 
         {
-            let app_data = self.app_data.lock().unwrap();
-            let mut keys = selected_keys.lock().unwrap();
-            let mut behavior = key_behavior.lock().unwrap();
-            crate::simulator::initialize_simulation_keys(&app_data, &mut keys, &mut behavior);
-            if keys.is_empty() {
+            let app_data_guard = app_data.lock().unwrap();
+            let mut keys_lock = selected_keys.lock().unwrap();
+            let mut behavior_lock = key_behavior.lock().unwrap();
+            crate::simulator::initialize_simulation_keys(&app_data_guard, &mut keys_lock, &mut behavior_lock);
+            if keys_lock.is_empty() {
                 log::warn!("No valid keys for simulation, skipping start.");
-                *self.running.lock().unwrap() = false;
+                *running.lock().unwrap() = false;
                 return;
             }
         }
 
-        thread::spawn(move || {
-            // Retrieve current modifier behavior
-            let mod_behavior = {
-                let ad = app_data_clone.lock().unwrap(); // <-- Use app_data_clone
-                ad.modifier_behavior
-            };
-            if let Err(e) = simulate_keys(
-                running,
-                interval_ms,
-                selected_keys,
-                key_behavior,
-                mod_behavior, // <-- Pass as 5th argument
-            ) {
-                log::error!("Failed to simulate keys: {}", e);
-            }
-        });
+        Self::spawn_simulation_thread(running, interval_ms, selected_keys, key_behavior, app_data);
     }
 
     // Persists application state to disk using the unified persistence function.
@@ -254,21 +271,23 @@ impl InputSimulatorApp {
 
     // Monitors global hotkeys in a background thread
     fn start_global_hotkey_listener(&self) {
-        // Capture necessary state for simulation from the app.
+        // Capture all necessary state with a single clone at the beginning
         let running = Arc::clone(&self.running);
         let interval_ms = Arc::clone(&self.interval_ms);
         let selected_keys = Arc::clone(&self.selected_keys);
         let key_behavior = Arc::clone(&self.key_behavior);
-        let app_data_clone = Arc::clone(&self.app_data); // <-- Clone the Arc here as well
-        
+        let app_data = Arc::clone(&self.app_data);
+        let previous_hotkey_state = Arc::clone(&self.previous_hotkey_state);
+        let last_toggle_time = Arc::clone(&self.last_toggle_time);
+
         start_global_hotkey_listener(
-            Arc::clone(&self.running),
-            Arc::clone(&self.interval_ms),
-            Arc::clone(&self.selected_keys),
-            Arc::clone(&self.key_behavior),
-            Arc::clone(&self.previous_hotkey_state),
-            Arc::clone(&self.last_toggle_time),
-            Arc::clone(&self.app_data),
+            Arc::clone(&running),
+            Arc::clone(&interval_ms),
+            Arc::clone(&selected_keys),
+            Arc::clone(&key_behavior),
+            Arc::clone(&previous_hotkey_state),
+            Arc::clone(&last_toggle_time),
+            Arc::clone(&app_data),
             Arc::new(move || {
                 log::info!("Global hotkey pressed.");
                 let mut running_lock = running.lock().unwrap();
@@ -276,7 +295,7 @@ impl InputSimulatorApp {
                 if *running_lock {
                     // Initialize simulation keys from latest app_data.
                     {
-                        let app_data_guard = app_data_clone.lock().unwrap();
+                        let app_data_guard = app_data.lock().unwrap();
                         let mut keys_lock = selected_keys.lock().unwrap();
                         let mut behavior_lock = key_behavior.lock().unwrap();
                         crate::simulator::initialize_simulation_keys(&app_data_guard, &mut keys_lock, &mut behavior_lock);
@@ -286,27 +305,15 @@ impl InputSimulatorApp {
                             return;
                         }
                     }
-                    // Spawn simulation thread.
-                    let run_clone = Arc::clone(&running);
-                    let interval_clone = Arc::clone(&interval_ms);
-                    let selected_clone = Arc::clone(&selected_keys);
-                    let key_behavior_clone = Arc::clone(&key_behavior);
-                    let app_data_clone2 = Arc::clone(&app_data_clone); // <-- Separate clone 
-                    thread::spawn(move || {
-                        let mod_behavior = {
-                            let ad = app_data_clone2.lock().unwrap();
-                            ad.modifier_behavior
-                        };
-                        if let Err(e) = crate::simulator::simulate_keys(
-                            run_clone,
-                            interval_clone,
-                            selected_clone,
-                            key_behavior_clone,
-                            mod_behavior, // <-- 5th argument
-                        ) {
-                            log::error!("Failed to simulate keys: {}", e);
-                        }
-                    });
+
+                    // Use the static helper function to spawn the simulation thread
+                    Self::spawn_simulation_thread(
+                        Arc::clone(&running),
+                        Arc::clone(&interval_ms),
+                        Arc::clone(&selected_keys),
+                        Arc::clone(&key_behavior),
+                        Arc::clone(&app_data)
+                    );
                 }
             })
         );
@@ -321,7 +328,7 @@ impl InputSimulatorApp {
         }
     }
 
-    // New helper function for state updates
+    // New helper function for state updates that automatically saves changes
     fn update_state<F, T>(&self, update_fn: F) -> T 
     where
         F: FnOnce(&mut AppData) -> T
@@ -334,17 +341,13 @@ impl InputSimulatorApp {
         result
     }
 
-    // New helper for interval updates
-    fn set_interval_internal(&mut self, interval: u64, save: bool) {
-        {
-            let mut app_data = self.app_data.lock().unwrap();
+    // Helper for interval updates
+    fn set_interval_internal(&mut self, interval: u64, _save: bool) {
+        self.update_state(|app_data| {
             log::info!("Updating interval from {} ms to {} ms", app_data.interval_ms, interval);
             app_data.interval_ms = interval;
-        }
+        });
         *self.interval_ms.lock().unwrap() = interval;
-        if save {
-            let _ = self.save_app_data();
-        }
     }
 
     // Updated handlers using the new helpers
@@ -387,14 +390,10 @@ impl InputSimulatorApp {
     }
 
     fn handle_finalize_keys(&mut self) {
-        let captured = {
-            let app_data = self.app_data.lock().unwrap();
-            app_data.captured_keys.clone()
-        };
+        *self.capturing.lock().unwrap() = false;
         self.update_state(|app_data| {
-            log::info!("Finalizing captured keys: {:?}", captured);
-            app_data.selected_keys = captured;
-            *self.capturing.lock().unwrap() = false;
+            log::info!("Finalizing captured keys: {:?}", app_data.captured_keys);
+            app_data.selected_keys = app_data.captured_keys.clone();
         });
     }
 
@@ -407,8 +406,8 @@ impl InputSimulatorApp {
     }
 
     fn handle_finalize_global_hotkey(&mut self) {
+        *self.capturing_hotkey.lock().unwrap() = false;
         self.update_state(|app_data| {
-            let mut capturing_hotkey = self.capturing_hotkey.lock().unwrap();
             if let Some(key) = &app_data.temp_hotkey.key {
                 let normalized = crate::utils::key_utils::normalize_key(key);
                 let modifiers = &app_data.temp_hotkey.modifiers;
@@ -427,48 +426,49 @@ impl InputSimulatorApp {
                 };
             }
             app_data.capturing_global_hotkey = false;
-            *capturing_hotkey = false;
         });
     }
 
     // Helper: Process new key events.
     fn handle_add_key(&mut self, key_event: KeyEvent) {
-        let mut app_data = self.app_data.lock().unwrap();
-        if app_data.capturing_global_hotkey {
-            let raw = format!("{:?}", key_event.key);
-            let normalized = crate::utils::key_utils::normalize_key(raw.as_str());
-            app_data.temp_hotkey.key = Some(normalized);
-            let temp_hotkey = &mut app_data.temp_hotkey;
-            temp_hotkey.modifiers.ctrl = key_event.modifiers.control();
-            temp_hotkey.modifiers.alt = key_event.modifiers.alt();
-            temp_hotkey.modifiers.shift = key_event.modifiers.shift();
-            temp_hotkey.modifiers.super_key = key_event.modifiers.logo();
-        } else if *self.capturing.lock().unwrap() {
-            let raw = format!("{:?}", key_event.key);
-            let normalized = crate::utils::key_utils::normalize_key(raw.as_str());
-            if !app_data.captured_keys.contains(&normalized) {
-                log::debug!("Captured new key: {}", normalized);
-                app_data.captured_keys.push(normalized);
+        let raw = format!("{:?}", key_event.key);
+        let normalized = crate::utils::key_utils::normalize_key(raw.as_str());
+        let is_capturing = *self.capturing.lock().unwrap();
+        
+        self.update_state(|app_data| {
+            if app_data.capturing_global_hotkey {
+                app_data.temp_hotkey.key = Some(normalized);
+                let temp_hotkey = &mut app_data.temp_hotkey;
+                temp_hotkey.modifiers.ctrl = key_event.modifiers.control();
+                temp_hotkey.modifiers.alt = key_event.modifiers.alt();
+                temp_hotkey.modifiers.shift = key_event.modifiers.shift();
+                temp_hotkey.modifiers.super_key = key_event.modifiers.logo();
+            } else if is_capturing {
+                if !app_data.captured_keys.contains(&normalized) {
+                    log::debug!("Captured new key: {}", normalized);
+                    app_data.captured_keys.push(normalized);
+                }
             }
-        }
+        });
     }
 
     // Helper: Cancel key capture.
     fn handle_cancel_capture(&mut self) {
         *self.capturing.lock().unwrap() = false;
-        let mut app_data = self.app_data.lock().unwrap();
-        app_data.captured_keys.clear();
+        self.update_state(|app_data| {
+            app_data.captured_keys.clear();
+        });
     }
 
     // Helper: Cancel global hotkey capture.
     fn handle_cancel_global_hotkey(&mut self) {
         *self.capturing_hotkey.lock().unwrap() = false;
-        let mut app_data = self.app_data.lock().unwrap();
-        app_data.capturing_global_hotkey = false;
+        self.update_state(|app_data| {
+            app_data.capturing_global_hotkey = false;
+        });
     }
 }
 
-// Messages for UI state updates and user interactions
 #[derive(Debug, Clone)]
 pub enum Message {
     ToggleRunning,
