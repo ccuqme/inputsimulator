@@ -11,7 +11,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-# Add permissions section to allow release creation
 permissions:
   contents: write
 
@@ -37,7 +36,7 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev
+        sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev zip
 
     - name: Build
       run: cargo build --release
@@ -47,19 +46,20 @@ jobs:
         export VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[0].version')
         mkdir -p "inputsimulator"
         cp target/release/inputsimulator "inputsimulator/inputsimulator"
+        zip -r "inputsimulator-${VERSION}-linux.zip" inputsimulator
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: inputsimulator-${VERSION}-linux
-        path: inputsimulator
+        path: inputsimulator-${VERSION}-linux.zip
         compression-level: 9
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: inputsimulator/*
+        files: inputsimulator-*.zip
         draft: false
         prerelease: false
         generate_release_notes: true
