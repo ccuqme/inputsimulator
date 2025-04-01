@@ -14,7 +14,7 @@ use evdev_rs::{
 };
 
 use crate::{
-    config::{KeyBehaviorMode, ModifierBehaviorMode},
+    config::{KeyBehaviorMode, ModifierBehaviorMode, HoldBehaviorMode},
     constants::{
         SIMULATION_HOLD_DELAY_MS, 
         MAX_RETRIES,
@@ -141,9 +141,11 @@ pub fn simulate_keys(
     selected_keys: Arc<Mutex<Vec<EventCode>>>,
     key_behavior: Arc<Mutex<KeyBehaviorMode>>,
     modifier_behavior: ModifierBehaviorMode,
+    hold_behavior: HoldBehaviorMode,
 ) -> Result<()> {
     let uinput_device = setup_device_with_retry(&selected_keys)?;
     let timeval = TimeVal::new(0, 0);
+    
     // Combine acquisitions for keys and mode.
     let (keys, mode) = {
         let keys = selected_keys.lock().unwrap().clone();
@@ -153,6 +155,7 @@ pub fn simulate_keys(
 
     log::info!("Device initialized with keys: {:?}", keys);
     log::info!("Key behavior mode set to: {:?}", mode);
+    log::info!("Hold behavior mode set to: {:?}", hold_behavior);
 
     // Initial sync
     write_event_with_retry(&uinput_device, &InputEvent::new(&timeval, &EventCode::EV_SYN(EV_SYN::SYN_REPORT), 0))?;
@@ -161,16 +164,39 @@ pub fn simulate_keys(
         KeyBehaviorMode::Hold => {
             thread::sleep(Duration::from_millis(SIMULATION_HOLD_DELAY_MS));
             
-            // Press keys
-            write_key_events(&uinput_device, &keys, 1, &timeval)?;
+            // Choose behavior based on hold_behavior mode
+            match hold_behavior {
+                HoldBehaviorMode::Continuous => {
+                    // Press all keys and hold forever
+                    write_key_events(&uinput_device, &keys, 1, &timeval)?;
 
-            while *running.lock().unwrap() {
-                write_key_events(&uinput_device, &[], 0, &timeval)?;
+                    while *running.lock().unwrap() {
+                        write_key_events(&uinput_device, &[], 0, &timeval)?;
+                    }
+
+                    // Release keys
+                    write_key_events(&uinput_device, &keys, 0, &timeval)?;
+                },
+                HoldBehaviorMode::Cycle => {
+                    // Cycle through each key, holding for interval_ms
+                    while *running.lock().unwrap() {
+                        let interval = *interval_ms.lock().unwrap();
+                        if keys.is_empty() {
+                            thread::sleep(Duration::from_millis(interval));
+                            continue;
+                        }
+                        for key in &keys {
+                            if !*running.lock().unwrap() {
+                                break;
+                            }
+                            write_key_events(&uinput_device, &[*key], 1, &timeval)?;
+                            thread::sleep(Duration::from_millis(interval));
+                            write_key_events(&uinput_device, &[*key], 0, &timeval)?;
+                        }
+                    }
+                }
             }
-
-            // Release keys
-            write_key_events(&uinput_device, &keys, 0, &timeval)?;
-        }
+        },
         KeyBehaviorMode::Click => {
             if modifier_behavior == ModifierBehaviorMode::Click {
                 // Separate modifier and non-modifier keys

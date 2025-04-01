@@ -5,7 +5,7 @@ use cosmic::{
 };
 use crate::{
     app::Message,
-    config::{AppData, KeyBehaviorMode},
+    config::{AppData, KeyBehaviorMode, HoldBehaviorMode},
     ui::components,
 };
 
@@ -150,7 +150,23 @@ impl<'a> View<'a> {
                 .push(text::body("Key Behavior: "))
                 .push(components::build_key_behavior_dropdown(self.app_data_guard.key_behavior)),
         );
-        if self.app_data_guard.key_behavior == KeyBehaviorMode::Click {
+        
+        // Show appropriate options based on key behavior
+        if self.app_data_guard.key_behavior == KeyBehaviorMode::Hold {
+            column = column.push(
+                widget::row()
+                    .push(text::body("Hold Behavior: "))
+                    .push(components::build_hold_behavior_dropdown(self.app_data_guard.hold_behavior)),
+            );
+            
+            // Show interval controls for Cycle hold behavior
+            if self.app_data_guard.hold_behavior == HoldBehaviorMode::Cycle {
+                column = column.push(
+                    widget::row()
+                        .push(components::interval_controls(self.interval, &self.app_data_guard)),
+                );
+            }
+        } else if self.app_data_guard.key_behavior == KeyBehaviorMode::Click {
             column = column.push(
                 widget::row()
                     .push(text::body("Modifier Behavior: "))

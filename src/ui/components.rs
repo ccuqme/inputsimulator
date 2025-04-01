@@ -5,7 +5,7 @@ use cosmic::{
 };
 use crate::{
     app::{Message, KeyEvent},
-    config::{AppData, KeyBehaviorMode, ModifierBehaviorMode},
+    config::{AppData, KeyBehaviorMode, ModifierBehaviorMode, HoldBehaviorMode},
     utils::handle_scroll_value,
     constants::{MIN_INTERVAL_MS, MAX_INTERVAL_MS},
 };
@@ -102,6 +102,19 @@ pub fn build_key_behavior_dropdown(current_mode: KeyBehaviorMode) -> Dropdown<'s
         |index| match index {
             0 => Message::UpdateKeyBehaviorMode(KeyBehaviorMode::Click),
             1 => Message::UpdateKeyBehaviorMode(KeyBehaviorMode::Hold),
+            _ => Message::Noop,
+        },
+    )
+}
+
+pub fn build_hold_behavior_dropdown(current_mode: HoldBehaviorMode) -> Dropdown<'static, &'static str, Message, Message> {
+    const HOLD_BEHAVIOR_MODES: [&str; 2] = ["Continuous", "Cycle"];
+    build_generic_dropdown(
+        &HOLD_BEHAVIOR_MODES,
+        current_mode,
+        |index| match index {
+            0 => Message::UpdateHoldBehaviorMode(HoldBehaviorMode::Continuous),
+            1 => Message::UpdateHoldBehaviorMode(HoldBehaviorMode::Cycle),
             _ => Message::Noop,
         },
     )

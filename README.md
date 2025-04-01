@@ -7,8 +7,13 @@ This tool automates repetitive key presses and mouse clicks at customizable inte
 ## Features
 
 - **Configurable Key Behavior**:
-  - Hold: Simulate keys being pressed continuously.
+  - Hold: 
+    - Continuous: Hold all keys down simultaneously until stopped.
+    - Cycle: Press each key sequentially, holding each for the specified interval.
   - Click: Simulate keys being pressed and released repeatedly at a set interval.
+- **Modifier Behavior**:
+  - Click: Press and release modifier keys separately from regular keys.
+  - Hold: Press modifier keys together with regular keys.
 - **Global Hotkeys**:
   - Assign a hotkey to toggle the simulation on or off (default: `F8`).
 

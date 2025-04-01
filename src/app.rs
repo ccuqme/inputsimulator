@@ -18,7 +18,7 @@ use std::{
 
 use crate::{
     simulator::simulate_keys,
-    config::{AppData, GlobalHotkey, KeyBehaviorMode, ModifierBehaviorMode, TempHotkeyState},
+    config::{AppData, GlobalHotkey, KeyBehaviorMode, ModifierBehaviorMode, HoldBehaviorMode, TempHotkeyState},
     utils::start_global_hotkey_listener, 
     ui::View,
     constants::DEFAULT_INTERVAL_MS,
@@ -81,6 +81,7 @@ impl Default for InputSimulatorApp {
                 interval_ms: 100,
                 key_behavior: KeyBehaviorMode::Click,
                 modifier_behavior: ModifierBehaviorMode::Click,
+                hold_behavior: HoldBehaviorMode::default(),
                 capturing_global_hotkey: false,
                 temp_hotkey: TempHotkeyState::default(),
             })),
@@ -139,6 +140,7 @@ impl Application for InputSimulatorApp {
             Message::UpdateModifierBehaviorMode(mode) => self.handle_update_modifier_behavior_mode(mode),
             Message::CancelCapture                 => self.handle_cancel_capture(),
             Message::UpdateKeyBehaviorMode(mode)   => self.handle_update_key_behavior_mode(mode),
+            Message::UpdateHoldBehaviorMode(mode)  => self.handle_update_hold_behavior_mode(mode),
             Message::CaptureGlobalHotkey           => self.handle_capture_global_hotkey(),
             Message::FinalizeGlobalHotkey          => self.handle_finalize_global_hotkey(),
             Message::CancelGlobalHotkey            => self.handle_cancel_global_hotkey(),
@@ -200,9 +202,9 @@ impl InputSimulatorApp {
         let app_data_inner = Arc::clone(&app_data);
 
         thread::spawn(move || {
-            let mod_behavior = {
+            let (mod_behavior, hold_behavior) = {
                 let ad = app_data_inner.lock().unwrap();
-                ad.modifier_behavior
+                (ad.modifier_behavior, ad.hold_behavior)
             };
             if let Err(e) = simulate_keys(
                 running_inner,
@@ -210,6 +212,7 @@ impl InputSimulatorApp {
                 selected_keys_inner,
                 key_behavior_inner,
                 mod_behavior,
+                hold_behavior,
             ) {
                 log::error!("Failed to simulate keys: {}", e);
             }
@@ -381,6 +384,13 @@ impl InputSimulatorApp {
         });
     }
 
+    fn handle_update_hold_behavior_mode(&mut self, mode: HoldBehaviorMode) {
+        self.update_state(|app_data| {
+            app_data.hold_behavior = mode;
+            log::info!("Hold behavior mode updated to: {:?}", mode);
+        });
+    }
+
     fn handle_capture_keys(&mut self) {
         *self.capturing.lock().unwrap() = true;
         self.update_state(|app_data| {
@@ -485,4 +495,5 @@ pub enum Message {
     FinalizeGlobalHotkey,
     CancelGlobalHotkey,
     UpdateModifierBehaviorMode(ModifierBehaviorMode),
+    UpdateHoldBehaviorMode(HoldBehaviorMode),
 }

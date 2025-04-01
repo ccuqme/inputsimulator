@@ -12,6 +12,39 @@ pub enum KeyBehaviorMode {
     Click,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum HoldBehaviorMode {
+    Continuous,
+    Cycle,
+}
+
+impl Default for HoldBehaviorMode {
+    fn default() -> Self {
+        HoldBehaviorMode::Continuous
+    }
+}
+
+impl std::fmt::Display for HoldBehaviorMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HoldBehaviorMode::Continuous => write!(f, "Continuous"),
+            HoldBehaviorMode::Cycle => write!(f, "Cycle"),
+        }
+    }
+}
+
+impl FromStr for HoldBehaviorMode {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<HoldBehaviorMode, Self::Err> {
+        match input {
+            "Continuous" => Ok(HoldBehaviorMode::Continuous),
+            "Cycle" => Ok(HoldBehaviorMode::Cycle),
+            _ => Err(()),
+        }
+    }
+}
+
 impl std::fmt::Display for KeyBehaviorMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", KEY_BEHAVIOR_MODES.iter()
@@ -122,6 +155,8 @@ pub struct AppData {
     pub interval_ms: u64,
     pub key_behavior: KeyBehaviorMode,
     pub modifier_behavior: ModifierBehaviorMode,
+    #[serde(default)]
+    pub hold_behavior: HoldBehaviorMode,
     #[serde(skip)]
     pub capturing_global_hotkey: bool,
     #[serde(skip)]
