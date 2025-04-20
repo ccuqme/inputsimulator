@@ -7,8 +7,6 @@ device_query: MIT
 
 serde: Apache-2.0 or MIT
 
-lazy_static: Apache-2.0 or MIT
-
 thiserror: Apache-2.0 or MIT
 
 log: Apache-2.0 or MIT

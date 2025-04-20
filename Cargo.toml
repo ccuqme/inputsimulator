@@ -1,6 +1,6 @@
 [package]
 name = "inputsimulator"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 
 [features]
@@ -12,7 +12,6 @@ device_query = "3.0.1"
 evdev-rs = "0.6.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-lazy_static = "1.5.0"
 thiserror = "2.0.12"
 log = "0.4.27"
 regex = "1.11.1"

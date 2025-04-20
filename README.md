@@ -1,6 +1,5 @@
-![image](https://github.com/user-attachments/assets/4d5facec-9f27-4457-8890-9412347ee145)
-
 # Linux AutoClicker for Keyboard and Mouse
+![image](https://github.com/user-attachments/assets/4d5facec-9f27-4457-8890-9412347ee145)
 
 This tool automates repetitive key presses and mouse clicks at customizable intervals. You can easily set up specific keys or mouse buttons to simulate and toggle the simulation on or off using a global hotkey.
 
@@ -50,7 +49,6 @@ To build the application from source, you need to have Rust and Cargo installed.
 - [evdev-rs](https://crates.io/crates/evdev-rs)
 - [device_query](https://crates.io/crates/device_query)
 - [serde](https://crates.io/crates/serde)
-- [lazy_static](https://crates.io/crates/lazy_static)
 - [thiserror](https://crates.io/crates/thiserror)
 - [log](https://crates.io/crates/log)
 - [regex](https://crates.io/crates/regex)

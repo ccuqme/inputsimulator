@@ -1,18 +1,17 @@
 use device_query::Keycode;
 use evdev_rs::enums::EV_KEY;
-use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
-lazy_static! {
-    pub(crate) static ref KEY_MAPPINGS: HashMap<&'static str, (Keycode, EV_KEY)> = {
-        let mut m = HashMap::new();
-        // Mouse buttons (Using F13-F15 for device_query compatibility)
-        m.insert("BTN_LEFT", (Keycode::F13, EV_KEY::BTN_LEFT));
-        m.insert("BTN_MIDDLE", (Keycode::F14, EV_KEY::BTN_MIDDLE));
-        m.insert("BTN_RIGHT", (Keycode::F15, EV_KEY::BTN_RIGHT));
+pub(crate) static KEY_MAPPINGS: LazyLock<HashMap<&'static str, (Keycode, EV_KEY)>> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    // Mouse buttons (Using F13-F15 for device_query compatibility)
+    m.insert("BTN_LEFT", (Keycode::F13, EV_KEY::BTN_LEFT));
+    m.insert("BTN_MIDDLE", (Keycode::F14, EV_KEY::BTN_MIDDLE));
+    m.insert("BTN_RIGHT", (Keycode::F15, EV_KEY::BTN_RIGHT));
 
-        // Letter keys
+    // Letter keys
         m.insert("A", (Keycode::A, EV_KEY::KEY_A));
         m.insert("B", (Keycode::B, EV_KEY::KEY_B));
         m.insert("C", (Keycode::C, EV_KEY::KEY_C));
@@ -119,8 +118,7 @@ lazy_static! {
         m.insert("ArrowUp", (Keycode::Up, EV_KEY::KEY_UP));
         
         m
-    };
-}
+});
 
 pub fn normalize_key(raw: &str) -> String {
     let mut key = raw.trim().to_string();
