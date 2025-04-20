@@ -2,11 +2,8 @@ name: Input Simulator CI
 
 on:
   push:
-    branches: [ "main" ]
     tags:
       - 'v*'
-  pull_request:
-    branches: [ "main" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -43,7 +40,7 @@ jobs:
     
     - name: Prepare artifact directory
       run: |
-        export VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[0].version')
+        export VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name=="inputsimulator") | .version')
         mkdir -p "inputsimulator"
         cp target/release/inputsimulator "inputsimulator/inputsimulator"
         zip -r "inputsimulator-${VERSION}-linux.zip" inputsimulator
