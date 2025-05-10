@@ -1,6 +1,6 @@
 [package]
 name = "inputsimulator"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 
 [features]
@@ -15,6 +15,7 @@ serde_json = "1.0.140"
 thiserror = "2.0.12"
 log = "0.4.27"
 regex = "1.11.1"
+smol = "2.0.2"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
