@@ -171,7 +171,7 @@ impl Application for InputSimulatorApp {
                 
                 return self.resize_window(panel_open);
             },
-            Message::RefreshLayout                 => {},
+            Message::RefreshUiState                => {},
             Message::Noop                          => {},
         }
         Task::none()
@@ -196,21 +196,24 @@ impl Application for InputSimulatorApp {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        cosmic::iced::event::listen_with(|event, _status, _context| {
-            match event {
-                Event::Keyboard(keyboard::Event::KeyPressed { 
-                    key,
-                    modifiers,
-                    ..
-                }) => {
-                    Some(Message::AddKey(KeyEvent { 
-                        key: key.clone(), 
-                        modifiers 
-                    }))
+        Subscription::batch(vec![
+            cosmic::iced::event::listen_with(|event, _status, _context| {
+                match event {
+                    Event::Keyboard(keyboard::Event::KeyPressed { 
+                        key,
+                        modifiers,
+                        ..
+                    }) => {
+                        Some(Message::AddKey(KeyEvent { 
+                            key: key.clone(), 
+                            modifiers 
+                        }))
+                    }
+                    _ => None,
                 }
-                _ => None,
-            }
-        })
+            }),
+            timer_subscription(250)
+        ])
     }
 }
 
@@ -248,7 +251,7 @@ impl InputSimulatorApp {
         });
     }
 
-    // Resize window and force UI refresh to fix text rendering issues
+    // Resize window based on the settings panel state
     fn resize_window(&self, panel_open: bool) -> Task<Message> {
         if let Some(window_id) = self.core.main_window_id() {
             let size = if panel_open {
@@ -263,14 +266,7 @@ impl InputSimulatorApp {
                 format!("small ({}x{})", size.0, size.1) 
             });
             
-            let resize_task = cosmic::iced::window::resize(window_id, cosmic::iced::Size::new(size.0, size.1));
-            
-            return Task::batch(vec![
-                resize_task,
-                Task::perform(async {
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }, |_| cosmic::Action::App(Message::RefreshLayout))
-            ]);
+            return cosmic::iced::window::resize(window_id, cosmic::iced::Size::new(size.0, size.1));
         }
         
         Task::none()
@@ -558,5 +554,23 @@ pub enum Message {
     UpdateModifierBehaviorMode(ModifierBehaviorMode),
     UpdateHoldBehaviorMode(HoldBehaviorMode),
     ToggleSettingsPanel,
-    RefreshLayout,
+    RefreshUiState,
+}
+
+// Timer subscription that periodically sends a message to refresh the UI state
+fn timer_subscription(interval_ms: u64) -> Subscription<Message> {
+    use cosmic::iced::futures::stream;
+
+    Subscription::run_with_id(
+        "ui-refresh-timer",
+        stream::unfold(
+            std::time::Instant::now(),
+            move |_last_tick| {               
+                async move {
+                    smol::Timer::after(std::time::Duration::from_millis(interval_ms)).await;
+                    Some((Message::RefreshUiState, std::time::Instant::now()))
+                }
+            }
+        )
+    )
 }
