@@ -66,6 +66,7 @@ pub struct InputSimulatorApp {
     previous_hotkey_state: Arc<Mutex<bool>>,
     last_toggle_time: Arc<Mutex<Option<Instant>>>,
     capturing_hotkey: Arc<Mutex<bool>>,
+    settings_panel_open: Arc<Mutex<bool>>,
 }
 
 impl Default for InputSimulatorApp {
@@ -82,6 +83,7 @@ impl Default for InputSimulatorApp {
                 key_behavior: KeyBehaviorMode::Click,
                 modifier_behavior: ModifierBehaviorMode::Click,
                 hold_behavior: HoldBehaviorMode::default(),
+                settings_panel_open: true,
                 capturing_global_hotkey: false,
                 temp_hotkey: TempHotkeyState::default(),
             })),
@@ -91,6 +93,7 @@ impl Default for InputSimulatorApp {
             previous_hotkey_state: Arc::new(Mutex::new(false)),
             last_toggle_time: Arc::new(Mutex::new(None)),
             capturing_hotkey: Arc::new(Mutex::new(false)),
+            settings_panel_open: Arc::new(Mutex::new(true)),
         }
     }
 }
@@ -123,9 +126,20 @@ impl Application for InputSimulatorApp {
         }
 
         app.load_app_data();
+        
+        // Sync the settings_panel_open state with the loaded app_data
+        {
+            let app_data = app.app_data.lock().unwrap();
+            let mut settings_panel_open = app.settings_panel_open.lock().unwrap();
+            *settings_panel_open = app_data.settings_panel_open;
+        }
+        
         app.start_global_hotkey_listener();
         
-        (app, Task::none())
+        // Set initial window size based on settings panel state
+        let resize_task = app.set_initial_window_size();
+        
+        (app, resize_task)
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
@@ -144,6 +158,20 @@ impl Application for InputSimulatorApp {
             Message::CaptureGlobalHotkey           => self.handle_capture_global_hotkey(),
             Message::FinalizeGlobalHotkey          => self.handle_finalize_global_hotkey(),
             Message::CancelGlobalHotkey            => self.handle_cancel_global_hotkey(),
+            Message::ToggleSettingsPanel           => {
+                let panel_open = {
+                    let mut settings_panel_open = self.settings_panel_open.lock().unwrap();
+                    *settings_panel_open = !*settings_panel_open;
+                    *settings_panel_open
+                };
+                
+                self.update_state(|app_data| {
+                    app_data.settings_panel_open = panel_open;
+                });
+                
+                return self.resize_window(panel_open);
+            },
+            Message::RefreshLayout                 => {},
             Message::Noop                          => {},
         }
         Task::none()
@@ -157,6 +185,7 @@ impl Application for InputSimulatorApp {
             app_data,
             *self.capturing.lock().unwrap(),
             *self.capturing_hotkey.lock().unwrap(),
+            *self.settings_panel_open.lock().unwrap(),
         );
         
         view.build()
@@ -219,6 +248,33 @@ impl InputSimulatorApp {
         });
     }
 
+    // Resize window and force UI refresh to fix text rendering issues
+    fn resize_window(&self, panel_open: bool) -> Task<Message> {
+        if let Some(window_id) = self.core.main_window_id() {
+            let size = if panel_open {
+                crate::ui::WINDOW_SIZE_WITH_PANEL
+            } else {
+                crate::ui::WINDOW_SIZE_WITHOUT_PANEL
+            };
+            
+            log::info!("Resizing window to {}", if panel_open { 
+                format!("default ({}x{})", size.0, size.1) 
+            } else { 
+                format!("small ({}x{})", size.0, size.1) 
+            });
+            
+            let resize_task = cosmic::iced::window::resize(window_id, cosmic::iced::Size::new(size.0, size.1));
+            
+            return Task::batch(vec![
+                resize_task,
+                Task::perform(async {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }, |_| cosmic::Action::App(Message::RefreshLayout))
+            ]);
+        }
+        
+        Task::none()
+    }
     // Starts the input simulation thread with current configuration
     fn start_simulation(&self) {
         let running = Arc::clone(&self.running);
@@ -250,6 +306,11 @@ impl InputSimulatorApp {
         save_app_data(&mut app_data)?;
         log::info!("Successfully saved app data");
         Ok(())
+    }
+    
+    fn set_initial_window_size(&mut self) -> Task<Message> {
+        let settings_panel_open = self.app_data.lock().unwrap().settings_panel_open;
+        self.resize_window(settings_panel_open)
     }
 
     // Loads application state from disk
@@ -496,4 +557,6 @@ pub enum Message {
     CancelGlobalHotkey,
     UpdateModifierBehaviorMode(ModifierBehaviorMode),
     UpdateHoldBehaviorMode(HoldBehaviorMode),
+    ToggleSettingsPanel,
+    RefreshLayout,
 }

@@ -1,6 +1,6 @@
 use cosmic::{
     iced::{Length, Element},
-    widget::{self, button, text, Column, Container, Row, Space, text::Text},
+    widget::{button, text, Column, Container, Row, Space},
     Theme,
 };
 use crate::{
@@ -15,6 +15,7 @@ pub struct View<'a> {
     app_data_guard: std::sync::MutexGuard<'a, AppData>,
     is_capturing: bool,
     is_capturing_hotkey: bool,
+    settings_panel_open: bool,
 }
 
 impl<'a> View<'a> {
@@ -24,6 +25,7 @@ impl<'a> View<'a> {
         app_data_guard: std::sync::MutexGuard<'a, AppData>,
         is_capturing: bool,
         is_capturing_hotkey: bool,
+        settings_panel_open: bool,
     ) -> Self {
         log::debug!("Creating new view with running: {}, capturing: {}, capturing_hotkey: {}", 
             is_running, is_capturing, is_capturing_hotkey);
@@ -33,94 +35,67 @@ impl<'a> View<'a> {
             app_data_guard,
             is_capturing,
             is_capturing_hotkey,
+            settings_panel_open,
         }
     }
 
     pub fn build(&self) -> Element<'a, Message, Theme> {
-        let left_column = self.build_left_column();
-        let right_column = self.build_right_column();
-
-        let footer = {
-            let mut row = Row::new().spacing(5);
-
-            if self.is_capturing {
-                // Show OK/Cancel buttons for key capture in place of Start/Stop
-                row = row
-                    .push(button::text("OK").on_press(Message::FinalizeKeys))
-                    .push(button::text("Cancel").on_press(Message::CancelCapture))
-                    .push(Space::with_width(Length::Fill));
-            } else {
-                // Show Start/Stop button when not capturing
-                row = row
-                    .push(components::build_start_button(self.is_running))
-                    .push(Space::with_width(Length::Fill));
-            }
-
-            if self.is_capturing_hotkey {
-                let hotkey_text = components::format_hotkey_text(
-                    self.app_data_guard.temp_hotkey.modifiers.ctrl,
-                    self.app_data_guard.temp_hotkey.modifiers.alt,
-                    self.app_data_guard.temp_hotkey.modifiers.shift,
-                    self.app_data_guard.temp_hotkey.modifiers.super_key,
-                    self.app_data_guard.temp_hotkey.key.as_deref(),
-                );
-                row = row
-                    .push(Text::new(format!("New Global Hotkey: {}", hotkey_text)))
-                    .push(button::text("OK").on_press(Message::FinalizeGlobalHotkey))
-                    .push(button::text("Cancel").on_press(Message::CancelGlobalHotkey));
-            } else if !self.is_capturing {
-                row = row.push(
-                    button::text(format!("Global Hotkey: {}", components::format_hotkey_text(
-                        self.app_data_guard.global_keybind.modifiers.ctrl,
-                        self.app_data_guard.global_keybind.modifiers.alt,
-                        self.app_data_guard.global_keybind.modifiers.shift,
-                        self.app_data_guard.global_keybind.modifiers.super_key,
-                        Some(&self.app_data_guard.global_keybind.key)
-                    )))
-                        .on_press(Message::CaptureGlobalHotkey)
-                        .class(cosmic::theme::Button::Text)
-                );
-            }
-
-            row
-        };
-
-        Container::new(
-            Column::new()
-                .push(
-                    Row::new()
-                        .push(
-                            Container::new(left_column)
-                                .width(Length::FillPortion(1))
-                        )
-                        .push(widget::vertical_space())
-                        .push(
-                            Container::new(right_column)
-                                .width(Length::FillPortion(1))
-                        )
-                        .spacing(20)
-                )
-                .push(footer)
-                .padding(10)
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+        let main_content = self.build_main_content();
+        let settings_panel = self.build_settings_panel();
+        
+        let mut layout = Row::new().spacing(0);
+        
+        layout = layout.push(
+            Container::new(main_content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+        );
+        
+        if self.settings_panel_open {
+            layout = layout.push(
+                Container::new(settings_panel)
+                    .width(Length::Fixed(250.0))
+                    .height(Length::Fill)
+            );
+        }
+        
+        Container::new(layout)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(10)
+            .into()
     }
-
-    fn build_left_column(&self) -> widget::Column<'a, Message> {
-        let mut column = widget::column().spacing(20);
-
+    
+    fn build_main_content(&self) -> Column<'a, Message> {
+        let mut column = Column::new().spacing(20);
+        
+        let toggle_icon = if self.settings_panel_open {
+            "go-next-symbolic"
+        } else {
+            "go-previous-symbolic"
+        };
+        
+        let title_row = Row::new()
+            .push(text::heading("Input Simulator").size(24))
+            .push(Space::with_width(Length::Fill))
+            .push(
+                button::icon(cosmic::widget::icon::from_name(toggle_icon))
+                    .on_press(Message::ToggleSettingsPanel)
+                    .tooltip(if self.settings_panel_open { "Hide settings" } else { "Show settings" })
+                    .class(cosmic::theme::Button::Text)
+            );
+        
+        column = column.push(title_row);
+        
         column = column.push(
             button::text(format!(
                 "Capture Keys{}",
                 if self.is_capturing { " (Active)" } else { "" }
             ))
                 .on_press(Message::CaptureKeys)
-                .class(cosmic::theme::Button::Text)
+                .class(cosmic::theme::Button::Suggested)
         );
 
-        // Show either captured keys during capture, or selected keys when not capturing
         if self.is_capturing {
             let captured_keys_text = self.app_data_guard
                 .captured_keys
@@ -132,52 +107,117 @@ impl<'a> View<'a> {
             log::debug!("Currently captured keys: {}", captured_keys_text);
 
             column = column
-                .push(text::body(format!("Captured Keys: {}", captured_keys_text)))
+                .push(text::body(format!("Captured Keys: {}", captured_keys_text)).size(16))
                 .push(components::build_mouse_buttons());
+                
+            column = column.push(Space::with_height(Length::Fill));
+            column = column.push(
+                Row::new()
+                    .push(
+                        button::text("OK")
+                            .on_press(Message::FinalizeKeys)
+                    )
+                    .push(Space::with_width(Length::Fill))
+                    .push(
+                        button::text("Cancel")
+                            .on_press(Message::CancelCapture)
+                    )
+                    .spacing(10)
+            );
         } else {
             column = column
-                .push(components::build_selected_keys_text(&self.app_data_guard.selected_keys));
+                .push(components::build_selected_keys_text(&self.app_data_guard.selected_keys))
+                .push(Space::with_height(Length::Fill));
+        }
+        if self.is_capturing_hotkey {
+            let hotkey_text = components::format_hotkey_text(
+                self.app_data_guard.temp_hotkey.modifiers.ctrl,
+                self.app_data_guard.temp_hotkey.modifiers.alt,
+                self.app_data_guard.temp_hotkey.modifiers.shift,
+                self.app_data_guard.temp_hotkey.modifiers.super_key,
+                self.app_data_guard.temp_hotkey.key.as_deref(),
+            );
+            
+            column = column
+                .push(text::body(format!("New Global Hotkey: {}", hotkey_text)).size(16))
+                .push(
+                    Row::new()
+                        .push(
+                            button::text("OK")
+                                .on_press(Message::FinalizeGlobalHotkey)
+                                .width(Length::Fill)
+                        )
+                        .push(
+                            button::text("Cancel")
+                                .on_press(Message::CancelGlobalHotkey)
+                                .width(Length::Fill)
+                        )
+                        .spacing(10)
+                );
+        }
+
+        if !self.is_capturing && !self.is_capturing_hotkey {
+            column = column.push(
+                Row::new()
+                    .push(Container::new(components::build_start_button(self.is_running)))
+                    .push(Space::with_width(Length::Fill))
+            );
         }
 
         column
     }
-
-    fn build_right_column(&self) -> widget::Column<'a, Message> {
-        let mut column = widget::column().spacing(20);
-
+    
+    fn build_settings_panel(&self) -> Column<'a, Message> {
+        let mut column = Column::new().spacing(20);
+        
+        column = column.push(text::heading("Settings").size(20));
+        
         column = column.push(
-            widget::row()
-                .push(text::body("Key Behavior: "))
-                .push(components::build_key_behavior_dropdown(self.app_data_guard.key_behavior)),
+            Column::new()
+                .push(text::body("Key Behavior:"))
+                .push(components::build_key_behavior_dropdown(self.app_data_guard.key_behavior).width(Length::Fill))
+                .spacing(5)
         );
         
-        // Show appropriate options based on key behavior
         if self.app_data_guard.key_behavior == KeyBehaviorMode::Hold {
             column = column.push(
-                widget::row()
-                    .push(text::body("Hold Behavior: "))
-                    .push(components::build_hold_behavior_dropdown(self.app_data_guard.hold_behavior)),
+                Column::new()
+                    .push(text::body("Hold Behavior:"))
+                    .push(components::build_hold_behavior_dropdown(self.app_data_guard.hold_behavior).width(Length::Fill))
+                    .spacing(5)
             );
-            
-            // Show interval controls for Cycle hold behavior
             if self.app_data_guard.hold_behavior == HoldBehaviorMode::Cycle {
-                column = column.push(
-                    widget::row()
-                        .push(components::interval_controls(self.interval, &self.app_data_guard)),
-                );
+                column = column.push(components::interval_controls(self.interval, &self.app_data_guard));
             }
         } else if self.app_data_guard.key_behavior == KeyBehaviorMode::Click {
             column = column.push(
-                widget::row()
-                    .push(text::body("Modifier Behavior: "))
-                    .push(components::build_modifier_behavior_dropdown(self.app_data_guard.modifier_behavior)),
+                Column::new()
+                    .push(text::body("Modifier Behavior:"))
+                    .push(components::build_modifier_behavior_dropdown(self.app_data_guard.modifier_behavior).width(Length::Fill))
+                    .spacing(5)
             );
+            column = column.push(components::interval_controls(self.interval, &self.app_data_guard));
+        }
+        
+        column = column.push(Space::with_height(Length::Fill));
+        if !self.is_capturing_hotkey {
             column = column.push(
-                widget::row()
-                    .push(components::interval_controls(self.interval, &self.app_data_guard)),
+                Row::new()
+                    .push(Space::with_width(Length::Fill))
+                    .push(
+                        button::text(format!("Global Hotkey: {}", components::format_hotkey_text(
+                            self.app_data_guard.global_keybind.modifiers.ctrl,
+                            self.app_data_guard.global_keybind.modifiers.alt,
+                            self.app_data_guard.global_keybind.modifiers.shift,
+                            self.app_data_guard.global_keybind.modifiers.super_key,
+                            Some(&self.app_data_guard.global_keybind.key)
+                        )))
+                            .on_press(Message::CaptureGlobalHotkey)
+                            .class(cosmic::theme::Button::Text)
+                    )
             );
         }
-
+        
         column
     }
 }

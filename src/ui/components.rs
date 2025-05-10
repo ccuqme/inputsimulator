@@ -1,6 +1,6 @@
 use cosmic::{
     iced::Length,
-    widget::{button, Column, Dropdown, MouseArea, Row, Slider, TextInput, Text},
+    widget::{button, Column, Container, Dropdown, MouseArea, Row, Slider, TextInput, Text},
     Element,
 };
 use crate::{
@@ -62,23 +62,27 @@ pub fn interval_controls(interval: f64, app_data: &AppData) -> Column<'static, M
 }
 
 pub fn build_mouse_buttons() -> impl Into<Element<'static, Message>> {
-    Row::new()
-        .spacing(5)
-        .push(
-            button::text("Left Click")
-                .on_press(Message::AddKey(KeyEvent::mouse_left()))
-                .class(cosmic::theme::Button::Text)
-        )
-        .push(
-            button::text("Middle Click")
-                .on_press(Message::AddKey(KeyEvent::mouse_middle()))
-                .class(cosmic::theme::Button::Text)
-        )
-        .push(
-            button::text("Right Click")
-                .on_press(Message::AddKey(KeyEvent::mouse_right()))
-                .class(cosmic::theme::Button::Text)
-        )
+    Container::new(
+        Row::new()
+            .spacing(8)
+            .push(
+                button::text("Left Click")
+                    .on_press(Message::AddKey(KeyEvent::mouse_left()))
+                    .width(Length::Fixed(80.0))
+            )
+            .push(
+                button::text("Middle Click")
+                    .on_press(Message::AddKey(KeyEvent::mouse_middle()))
+                    .width(Length::Fixed(95.0))
+            )
+            .push(
+                button::text("Right Click")
+                    .on_press(Message::AddKey(KeyEvent::mouse_right()))
+                    .width(Length::Fixed(80.0))
+            )
+    )
+    .width(Length::Fill)
+    .padding(5)
 }
 
 fn build_generic_dropdown<T, F>(
@@ -150,20 +154,42 @@ pub fn format_hotkey_text(
 }
 
 pub fn build_start_button(is_running: bool) -> impl Into<Element<'static, Message>> {
-    button::text(if is_running { "Stop" } else { "Start" })
+    let (label, class) = if is_running {
+        ("Stop", cosmic::theme::Button::Destructive)
+    } else {
+        ("Start", cosmic::theme::Button::Suggested)
+    };
+    
+    button::text(label)
         .on_press(Message::ToggleRunning)
-        .class(cosmic::theme::Button::Text)
+        .class(class)
 }
 
 pub fn build_selected_keys_text(keys: &[String]) -> Element<'static, Message> {
     let selected_count = keys.len();
-    Column::new()
-        .push(Text::new(format!("Selected Keys ({}):", selected_count)))
-        .push(
-            Text::new(keys.join(", "))
+    let keys_text = if keys.is_empty() {
+        "No keys selected. Press 'Capture Keys' to begin.".to_string()
+    } else {
+        keys.join(", ")
+    };
+    
+    // Create a owned string to avoid lifetime issues
+    let keys_display = keys_text.clone();
+    
+    cosmic::widget::container(
+        Column::new()
+            .push(Text::new(format!("Selected Keys ({}):", selected_count)).size(16))
+            .push(
+                cosmic::widget::container(
+                    Text::new(keys_display)
+                        .width(Length::Fill)
+                        .wrapping(cosmic::iced_core::text::Wrapping::WordOrGlyph)
+                )
+                .padding(10)
                 .width(Length::Fill)
-                .wrapping(cosmic::iced_core::text::Wrapping::WordOrGlyph)
-        )
-        .spacing(5)
-        .into()
+            )
+            .spacing(5)
+    )
+    .width(Length::Fill)
+    .into()
 }

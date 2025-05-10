@@ -157,6 +157,8 @@ pub struct AppData {
     pub modifier_behavior: ModifierBehaviorMode,
     #[serde(default)]
     pub hold_behavior: HoldBehaviorMode,
+    #[serde(default)]
+    pub settings_panel_open: bool,
     #[serde(skip)]
     pub capturing_global_hotkey: bool,
     #[serde(skip)]
