@@ -1,5 +1,5 @@
 # Linux AutoClicker for Keyboard and Mouse
-![image](https://github.com/user-attachments/assets/4d5facec-9f27-4457-8890-9412347ee145)
+![image](https://github.com/user-attachments/assets/dff24dc2-04a4-4fbe-b5df-4fe36d6a4a40)
 
 This tool automates repetitive key presses and mouse clicks at customizable intervals. You can easily set up specific keys or mouse buttons to simulate and toggle the simulation on or off using a global hotkey.
 
@@ -19,7 +19,7 @@ This tool automates repetitive key presses and mouse clicks at customizable inte
 ## Compatibility
 
 - **Platforms**: Made for Linux, untested and unsupported on anything else.
-- **Desktop Environments**: Tested on KDE Plasma 6.3.3 and COSMIC Desktop Alpha 5.
+- **Desktop Environments**: Tested on KDE Plasma 6.3.4 and COSMIC Desktop Alpha 7.1.
 
 ## Known Issues
 
@@ -52,6 +52,7 @@ To build the application from source, you need to have Rust and Cargo installed.
 - [thiserror](https://crates.io/crates/thiserror)
 - [log](https://crates.io/crates/log)
 - [regex](https://crates.io/crates/regex)
+- [smol](https://crates.io/crates/smol)
 
 ## Contributing
 
